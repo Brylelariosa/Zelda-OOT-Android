@@ -9,6 +9,12 @@ if (buildAsApplication) {
 
 android {
     compileSdkVersion 31
+
+    // libultraship's CrashHandler.h includes <execinfo.h>, which NDK r21 (the one AGP 7.0 falls back to) does not
+    // ship. AGP ignores ANDROID_NDK_HOME, so the NDK has to be pinned here.
+    // Keep this a plain quoted literal: the CI workflow greps this line to decide which NDK to install.
+    ndkVersion "26.1.10909125"
+
     defaultConfig {
         if (buildAsApplication) {
             applicationId "com.dishii.soh"
@@ -17,6 +23,15 @@ android {
         targetSdkVersion 31
         versionCode 5
         versionName "1.2.1"
+
+        // Same CMake arguments as the upstream Android port (Waterdish/Shipwright-Android).
+        // USE_OPENGLES=ON switches libultraship to its OpenGL ES backend; without it gfx_opengl.cpp takes the desktop
+        // path and includes <GL/glew.h>, which Android does not have.
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_APP_PLATFORM=android-23", "-DANDROID_STL=c++_static", "-DHAVE_LD_VERSION_SCRIPT=OFF", "-DUSE_OPENGLES=ON"
+            }
+        }
     }
 
     buildTypes {
