@@ -3,6 +3,9 @@
 #include <string.h>
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#ifdef __ANDROID__
+#include "soh/Enhancements/touch-controls/TouchControlsBridge.h"
+#endif
 
 s32 D_8012D280 = 1;
 
@@ -316,6 +319,10 @@ void PadMgr_HandleRetraceMsg(PadMgr* padMgr) {
     }
     osRecvMesg(queue, NULL, OS_MESG_BLOCK);
     osContGetReadData(padMgr->pads);
+#ifdef __ANDROID__
+    // The on-screen touch controls feed player 1, next to whatever controller that player uses.
+    TouchControls_ReadToPad(&padMgr->pads[0]);
+#endif
 
     for (i = 0; i < __osMaxControllers; i++) {
         padMgr->padStatus[i].status = Controller_ShouldRumble(i);
