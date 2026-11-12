@@ -14,28 +14,23 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
-import android.Manifest;
-import android.content.pm.PackageManager;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import android.util.Log;
 
 //This class is the main SDLActivity and just sets up a bunch of default files
 public class MainActivity extends SDLActivity{
 
-    private static final int STORAGE_PERMISSION_REQUEST_CODE = 1;
+    private static final String TAG = "SoH";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        // The game looks for soh.otr in the app's own external folder as soon as SDL starts its native thread,
+        // which happens after super.onCreate() has returned. So the bundled files are put there first.
+        // getExternalFilesDir() needs no storage permission, so nothing here waits for a permission prompt
+        // (a denied prompt used to leave the game without soh.otr: "soh.otr file is missing").
+        doVersionCheck();
+        setupFiles();
 
-        // Check if storage permissions are granted
-        if (hasStoragePermission()) {
-            doVersionCheck();
-            setupFiles();
-        } else {
-            requestStoragePermission();
-        }
+        super.onCreate(savedInstanceState);
     }
 
     private void doVersionCheck(){
@@ -72,71 +67,39 @@ public class MainActivity extends SDLActivity{
 
 
 
-    // Check if storage permission is granted
-    private boolean hasStoragePermission() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                        == PackageManager.PERMISSION_GRANTED;
-    }
-
-    // Request storage permission
-    private void requestStoragePermission() {
-        ActivityCompat.requestPermissions(this,
-                new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                STORAGE_PERMISSION_REQUEST_CODE);
-    }
-
-    // Handle permission request result
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == STORAGE_PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                setupFiles();
-            } else {
-                // Permission denied, handle accordingly (e.g., show a message)
-            }
-        }
-    }
-
     private void setupFiles(){
-        //Copy assets folder for rom extraction
-        File externalAssetsDir = new File(getExternalFilesDir(null), "assets");
-        if (!externalAssetsDir.exists()) {
+        File filesDir = getExternalFilesDir(null);
+        if (filesDir == null) {
+            Log.e(TAG, "No external files folder is available");
+            return;
+        }
+
+        //Copy assets folder for rom extraction. The marker is written only when the copy has finished, so a copy
+        //that was cut short is continued on the next start instead of being taken for complete.
+        File externalAssetsDir = new File(filesDir, "assets");
+        File assetsCopied = new File(externalAssetsDir, ".copied");
+        if (!assetsCopied.exists()) {
             try {
                 externalAssetsDir.mkdirs();
                 AssetCopyUtil.copyAssetsToExternal(this, "assets", externalAssetsDir.getAbsolutePath());
+                assetsCopied.createNewFile();
             } catch (IOException e) {
-                e.printStackTrace();
+                Log.e(TAG, "Copying the bundled assets failed", e);
             }
         }
 
         //Create empty mods folder
-        File externalModsDir = new File(getExternalFilesDir(null), "mods");
-        externalModsDir.mkdirs();
+        new File(filesDir, "mods").mkdirs();
 
         //Copy soh.otr
-        File externalSohOtrFile = new File(getExternalFilesDir(null), "soh.otr");
+        File externalSohOtrFile = new File(filesDir, "soh.otr");
         if (!externalSohOtrFile.exists()) {
             try {
-                InputStream in = getAssets().open("soh.otr");
-                OutputStream out = new FileOutputStream(externalSohOtrFile);
-
-                byte[] buffer = new byte[1024];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
-
-                in.close();
-                out.close();
+                AssetCopyUtil.copyAssetFile(this, "soh.otr", externalSohOtrFile);
             } catch (IOException e) {
-                e.printStackTrace();
+                Log.e(TAG, "Copying soh.otr failed", e);
             }
         }
-
     }
 
     private native void nativeHandleSelectedFile(String filePath);
